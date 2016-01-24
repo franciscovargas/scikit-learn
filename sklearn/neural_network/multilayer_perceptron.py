@@ -27,7 +27,7 @@ from ..utils.extmath import safe_sparse_dot
 from ..utils.validation import check_is_fitted
 from ..utils.multiclass import _check_partial_fit_first_call
 
-
+print "franciscos fork"
 _STOCHASTIC_ALGOS = ['sgd', 'adam']
 
 
@@ -48,7 +48,8 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
                  alpha, batch_size, learning_rate, learning_rate_init, power_t,
                  max_iter, loss, shuffle, random_state, tol, verbose,
                  warm_start, momentum, nesterovs_momentum, early_stopping,
-                 validation_fraction, beta_1, beta_2, epsilon):
+                 validation_fraction, beta_1, beta_2, epsilon, spectral_mode='not_fft'):
+        self.spectral_mode = spectral_mode
         self.activation = activation
         self.algorithm = algorithm
         self.alpha = alpha
@@ -282,9 +283,14 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
 
         for i in range(self.n_layers_ - 1):
             rng = check_random_state(self.random_state)
-            coef_init, intercept_init = self._init_coef(layer_units[i],
-                                                        layer_units[i + 1],
-                                                        rng)
+            if i ==0 and self.spectral_mode == 'fft':
+                coef_init, intercept_init = self._init_coef_ft(layer_units[i],
+                                                               layer_units[i+1],
+                                                               rng)
+            else:
+                coef_init, intercept_init = self._init_coef(layer_units[i],
+                                                            layer_units[i+1],
+                                                            rng)
             self.coefs_.append(coef_init)
             self.intercepts_.append(intercept_init)
 
@@ -312,6 +318,33 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
                              self.activation)
 
         coef_init = rng.uniform(-init_bound, init_bound, (fan_in, fan_out))
+        intercept_init = rng.uniform(-init_bound, init_bound, fan_out)
+        return coef_init, intercept_init
+
+    def _init_coef_ft(self, fan_in, fan_out, rng):
+        """
+        This function is only to be used to initialize the weights
+        of the first layer given that such layer has an odim equal
+        to that of its idim . In other words fan_in == fan_out
+        """
+        # dft func to be used:
+        assert fan_in == fan_out
+
+        # Literally whatevs
+        if self.activation == 'logistic':
+            # Use the initialization method recommended by
+            # Glorot et al.
+            init_bound = np.sqrt(2. / (fan_in + fan_out))
+        elif self.activation == 'tanh':
+            init_bound = np.sqrt(6. / (fan_in + fan_out))
+        elif self.activation == 'relu':
+            init_bound = np.sqrt(6. / (fan_in + fan_out))
+        else:
+            # this was caught earlier, just to make sure
+            raise ValueError("Unknown activation function %s" %
+                             self.activation)
+
+        coef_init = np.vander(np.exp(-2j*np.pi*np.arange(fan_in)))
         intercept_init = rng.uniform(-init_bound, init_bound, fan_out)
         return coef_init, intercept_init
 
@@ -870,7 +903,7 @@ class MLPClassifier(BaseMultilayerPerceptron, ClassifierMixin):
                  verbose=False, warm_start=False, momentum=0.9,
                  nesterovs_momentum=True, early_stopping=False,
                  validation_fraction=0.1, beta_1=0.9, beta_2=0.999,
-                 epsilon=1e-8):
+                 epsilon=1e-8,spectral_mode='no_fft'):
 
         sup = super(MLPClassifier, self)
         sup.__init__(hidden_layer_sizes=hidden_layer_sizes,
@@ -883,7 +916,7 @@ class MLPClassifier(BaseMultilayerPerceptron, ClassifierMixin):
                      nesterovs_momentum=nesterovs_momentum,
                      early_stopping=early_stopping,
                      validation_fraction=validation_fraction,
-                     beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
+                     beta_1=beta_1, beta_2=beta_2, epsilon=epsilon, spectral_mode='not_fft')
 
         self.label_binarizer_ = LabelBinarizer()
 
