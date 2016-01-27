@@ -9,7 +9,7 @@
 import numpy as np
 
 from abc import ABCMeta, abstractmethod
-from scipy.optimize import fmin_l_bfgs_b
+from scipy.optimize import fmin_l_bfgs_b, fmin_ncg
 import warnings
 
 from ..base import BaseEstimator, ClassifierMixin, RegressorMixin
@@ -281,9 +281,11 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         self.coefs_ = []
         self.intercepts_ = []
 
+        print self.spectral_mode
         for i in range(self.n_layers_ - 1):
             rng = check_random_state(self.random_state)
-            if i ==0 and self.spectral_mode == 'fft':
+            if i ==0 and self.spectral_mode:
+                print "Enter the dragon"
                 coef_init, intercept_init = self._init_coef_ft(layer_units[i],
                                                                layer_units[i+1],
                                                                rng)
@@ -329,7 +331,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         """
         # dft func to be used:
         assert fan_in == fan_out
-
+        print "fft basic prior"
         # Literally whatevs
         if self.activation == 'logistic':
             # Use the initialization method recommended by
@@ -344,7 +346,8 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
             raise ValueError("Unknown activation function %s" %
                              self.activation)
 
-        coef_init = np.vander(np.exp(-2j*np.pi*np.arange(fan_in)))
+        coef_init = (np.vander(np.exp(-2j*np.pi*np.arange(fan_in))))
+        # print coef_init
         intercept_init = rng.uniform(-init_bound, init_bound, fan_out)
         return coef_init, intercept_init
 
@@ -487,13 +490,27 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         else:
             iprint = -1
 
-        optimal_parameters, self.loss_, d = fmin_l_bfgs_b(
-            x0=packed_coef_inter,
-            func=self._loss_grad_lbfgs,
-            maxfun=self.max_iter,
-            iprint=iprint,
-            pgtol=self.tol,
-            args=(X, y, activations, deltas, coef_grads, intercept_grads))
+        # fmin_cg => fmin_l_bfgs_b
+        # print packed_coef_inter
+        # kjhkjhkjhk
+        if self.spectral_mode == 'ffkjhkjshfkjsht':
+            from scipy.optimize import fmin_tnc
+            print "COMPLEX OPTIMIZATION"
+            optimal_parameters, self.loss_, d = fmin_tnc(
+                x0=packed_coef_inter,
+                func=self._loss_grad_lbfgs,
+                maxfun=self.max_iter,
+                args=(X, y, activations, deltas, coef_grads, intercept_grads))
+            # print dx, dy
+            # d = dx + 1j*dy
+        else:
+            optimal_parameters, self.loss_, d = fmin_l_bfgs_b(
+                x0=packed_coef_inter,
+                func=self._loss_grad_lbfgs,
+                maxfun=self.max_iter,
+                iprint=iprint,
+                pgtol=self.tol,
+                args=(X, y, activations, deltas, coef_grads, intercept_grads))
 
         self._unpack(optimal_parameters)
 
@@ -916,7 +933,7 @@ class MLPClassifier(BaseMultilayerPerceptron, ClassifierMixin):
                      nesterovs_momentum=nesterovs_momentum,
                      early_stopping=early_stopping,
                      validation_fraction=validation_fraction,
-                     beta_1=beta_1, beta_2=beta_2, epsilon=epsilon, spectral_mode='not_fft')
+                     beta_1=beta_1, beta_2=beta_2, epsilon=epsilon, spectral_mode=spectral_mode)
 
         self.label_binarizer_ = LabelBinarizer()
 
